@@ -109,6 +109,12 @@ export const EMPTY_DRAFT: ShipmentDraft = {
   serviceType: "FEDEX_GROUND",
 };
 
+/** Contenido declarado del envío de ejemplo, necesario por ser internacional. */
+export const DEMO_CONTENTS = {
+  description: "Manual de los Jóvenes Castores, edición impresa",
+  declaredValue: "25",
+};
+
 /** Remitentes de ejemplo: se rota entre ellos para que el autocompletado no sea siempre idéntico. */
 const DEMO_SENDERS = ["Hugo Duck", "Paco Duck", "Luis Duck"];
 

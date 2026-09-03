@@ -4,14 +4,18 @@ import {
   type Address,
   type ShipmentDraft,
 } from "@/lib/shipping";
-import { cn } from "@/lib/utils";
+import { toAscii } from "@/lib/fedex-payload";
 
-/** Marcador de posición mientras el campo sigue vacío, para que la etiqueta no colapse. */
+/**
+ * Marcador de posición mientras el campo sigue vacío, para que la etiqueta no colapse.
+ * El valor se normaliza a ASCII: es lo que FedEx imprimirá de verdad, y así
+ * quien escribe "Medellín" ve desde ya que en la etiqueta saldrá "MEDELLIN".
+ */
 function Slot({
   value,
   placeholder,
 }: Readonly<{ value: string; placeholder: string }>) {
-  if (value) return <>{value}</>;
+  if (value) return <>{toAscii(value)}</>;
   return <span className="text-neutral-400">{placeholder}</span>;
 }
 
@@ -33,7 +37,7 @@ function AddressBlock({
         <Slot value={address.personName} placeholder={placeholders.name} />
       </p>
       {address.companyName ? (
-        <p className="uppercase">{address.companyName}</p>
+        <p className="uppercase">{toAscii(address.companyName)}</p>
       ) : null}
       <p className="uppercase">
         <Slot value={address.streetLine} placeholder={placeholders.street} />
@@ -62,10 +66,9 @@ export function LabelPreview({ draft }: Readonly<{ draft: ShipmentDraft }>) {
   return (
     <div
       className="mx-auto w-full max-w-[340px] bg-white font-mono text-[11px] leading-tight text-neutral-900 shadow-sm ring-1 ring-neutral-300"
-      style={{ aspectRatio: "4 / 6" }}
       aria-label="Vista previa de la etiqueta"
     >
-      <div className="flex h-full flex-col">
+      <div className="flex flex-col">
         <div className="flex items-start justify-between border-b border-neutral-300 px-3 py-2">
           <AddressBlock
             heading="Desde"
@@ -92,7 +95,7 @@ export function LabelPreview({ draft }: Readonly<{ draft: ShipmentDraft }>) {
             <Slot value={draft.recipient.personName} placeholder="Destinatario" />
           </p>
           {draft.recipient.companyName ? (
-            <p className="uppercase">{draft.recipient.companyName}</p>
+            <p className="uppercase">{toAscii(draft.recipient.companyName)}</p>
           ) : null}
           <p className="uppercase">
             <Slot value={draft.recipient.streetLine} placeholder="Dirección" />
@@ -127,27 +130,6 @@ export function LabelPreview({ draft }: Readonly<{ draft: ShipmentDraft }>) {
           </span>
         </div>
 
-        {/* Zona del código de barras: patrón decorativo hasta que la API devuelva la etiqueta real. */}
-        <div className="mt-auto space-y-2 px-3 py-3">
-          <div
-            className="flex h-16 items-end gap-px overflow-hidden"
-            aria-hidden="true"
-          >
-            {Array.from({ length: 64 }).map((_, i) => (
-              <span
-                key={i}
-                className={cn(
-                  "bg-neutral-300",
-                  i % 5 === 0 ? "w-1" : "w-px",
-                  i % 3 === 0 ? "h-full" : "h-5/6",
-                )}
-              />
-            ))}
-          </div>
-          <p className="text-center text-[10px] uppercase tracking-widest text-neutral-400">
-            Número de rastreo pendiente
-          </p>
-        </div>
       </div>
     </div>
   );

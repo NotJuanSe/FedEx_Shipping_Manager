@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { PackageIcon, SendIcon, WandSparklesIcon } from "lucide-react";
+import {
+  LoaderCircleIcon,
+  PackageIcon,
+  SendIcon,
+  WandSparklesIcon,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -12,6 +17,15 @@ import {
   type FieldErrors,
 } from "@/components/shipment-form";
 import {
+  LabelError,
+  LabelSuccess,
+  type CreatedLabel,
+  type LabelFailure,
+} from "@/components/label-result";
+import { Input } from "@/components/ui/input";
+import { Field, FieldLabel } from "@/components/ui/field";
+import {
+  DEMO_CONTENTS,
   EMPTY_DRAFT,
   billableWeight,
   buildDemoDraft,
@@ -60,6 +74,13 @@ function validatePath(draft: ShipmentDraft, path: string): string | null {
 export default function Home() {
   const [draft, setDraft] = useState<ShipmentDraft>(EMPTY_DRAFT);
   const [errors, setErrors] = useState<FieldErrors>({});
+  const [contents, setContents] = useState({
+    description: "",
+    declaredValue: "",
+  });
+  const [status, setStatus] = useState<"idle" | "sending">("idle");
+  const [label, setLabel] = useState<CreatedLabel | null>(null);
+  const [failure, setFailure] = useState<LabelFailure | null>(null);
 
   const updateAddress =
     (section: "shipper" | "recipient") =>
@@ -111,9 +132,53 @@ export default function Home() {
     "package.height",
   ].filter((path) => validatePath(draft, path) !== null);
 
-  const isComplete = missingPaths.length === 0;
+  const international =
+    draft.shipper.countryCode !== draft.recipient.countryCode;
+
+  // Un envío entre países necesita declaración aduanera o FedEx lo rechaza.
+  const customsReady =
+    !international ||
+    (contents.description.trim() !== "" && Number(contents.declaredValue) > 0);
+
+  const isComplete = missingPaths.length === 0 && customsReady;
   const dimWeight = dimensionalWeight(draft.packageDetail);
   const billable = billableWeight(draft.packageDetail);
+
+  async function createLabel() {
+    setStatus("sending");
+    setFailure(null);
+    setLabel(null);
+
+    try {
+      const response = await fetch("/api/labels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          draft,
+          contents: international ? contents : undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setFailure({
+          message: data.error ?? "No se pudo crear la etiqueta.",
+          problems: data.problems ?? [],
+        });
+        return;
+      }
+
+      setLabel(data as CreatedLabel);
+    } catch {
+      setFailure({
+        message: "No se pudo contactar al servidor.",
+        problems: [],
+      });
+    } finally {
+      setStatus("idle");
+    }
+  }
 
   return (
     <div className="min-h-dvh bg-background">
@@ -137,7 +202,10 @@ export default function Home() {
             className="ml-auto h-11"
             onClick={() => {
               setDraft(buildDemoDraft());
+              setContents(DEMO_CONTENTS);
               setErrors({});
+              setLabel(null);
+              setFailure(null);
             }}
           >
             <WandSparklesIcon className="size-4" aria-hidden="true" />
@@ -221,19 +289,85 @@ export default function Home() {
               onBlur={handleBlur}
             />
           </section>
+
+          {international ? (
+            <>
+              <Separator />
+              <section aria-labelledby="customs-heading" className="space-y-4">
+                <div>
+                  <h2
+                    id="customs-heading"
+                    className="text-sm font-semibold uppercase tracking-wide text-muted-foreground"
+                  >
+                    Aduana
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground text-pretty">
+                    El envío cruza fronteras, así que necesita declaración de
+                    contenido.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+                  <Field>
+                    <FieldLabel htmlFor="customs-description">
+                      Descripción del contenido
+                    </FieldLabel>
+                    <Input
+                      id="customs-description"
+                      value={contents.description}
+                      onChange={(e) =>
+                        setContents((prev) => ({
+                          ...prev,
+                          description: e.target.value,
+                        }))
+                      }
+                      placeholder="Qué es, de qué está hecho y para qué sirve"
+                      autoComplete="off"
+                    />
+                  </Field>
+
+                  <Field>
+                    <FieldLabel htmlFor="customs-value">
+                      Valor declarado (USD)
+                    </FieldLabel>
+                    <Input
+                      id="customs-value"
+                      value={contents.declaredValue}
+                      onChange={(e) =>
+                        setContents((prev) => ({
+                          ...prev,
+                          declaredValue: e.target.value,
+                        }))
+                      }
+                      inputMode="decimal"
+                      className="font-mono tabular-nums"
+                      autoComplete="off"
+                    />
+                  </Field>
+                </div>
+              </section>
+            </>
+          ) : null}
         </form>
 
         <aside className="space-y-4 lg:sticky lg:top-8 lg:self-start">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              Vista previa
+              {label ? "Etiqueta creada" : "Vista previa"}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground text-pretty">
-              Se actualiza mientras escribes.
+              {label
+                ? "Lista para imprimir en rollo térmico de 4x6."
+                : "Se actualiza mientras escribes."}
             </p>
           </div>
 
-          <LabelPreview draft={draft} />
+          {/* Una vez creada, la etiqueta real ocupa el lugar del borrador. */}
+          {label ? (
+            <LabelSuccess label={label} />
+          ) : (
+            <LabelPreview draft={draft} />
+          )}
 
           <dl className="space-y-2 rounded-lg border border-border bg-card p-4 text-sm">
             <div className="flex items-center justify-between gap-4">
@@ -250,23 +384,57 @@ export default function Home() {
             </div>
           </dl>
 
-          <Button
-            type="submit"
-            size="lg"
-            className="h-11 w-full bg-accent text-accent-foreground hover:bg-accent/90"
-            disabled={!isComplete}
-            onClick={(e) => e.preventDefault()}
-          >
-            <SendIcon className="size-4" aria-hidden="true" />
-            Crear etiqueta
-          </Button>
+          {label ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="h-11 w-full"
+              onClick={() => setLabel(null)}
+            >
+              Volver al borrador
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="lg"
+              className="h-11 w-full bg-accent text-accent-foreground hover:bg-accent/90"
+              disabled={!isComplete || status === "sending"}
+              onClick={createLabel}
+            >
+              {status === "sending" ? (
+                <>
+                  <LoaderCircleIcon
+                    className="size-4 animate-spin"
+                    aria-hidden="true"
+                  />
+                  Creando etiqueta…
+                </>
+              ) : (
+                <>
+                  <SendIcon className="size-4" aria-hidden="true" />
+                  Crear etiqueta
+                </>
+              )}
+            </Button>
+          )}
 
-          {!isComplete ? (
-            <p className="text-sm text-muted-foreground text-pretty">
-              Faltan {missingPaths.length}{" "}
-              {missingPaths.length === 1 ? "campo" : "campos"} por completar.
-            </p>
-          ) : null}
+          <div aria-live="polite" className="space-y-4">
+            {!isComplete && missingPaths.length > 0 ? (
+              <p className="text-sm text-muted-foreground text-pretty">
+                Faltan {missingPaths.length}{" "}
+                {missingPaths.length === 1 ? "campo" : "campos"} por completar.
+              </p>
+            ) : null}
+
+            {!isComplete && missingPaths.length === 0 && !customsReady ? (
+              <p className="text-sm text-muted-foreground text-pretty">
+                Falta la declaración de aduana.
+              </p>
+            ) : null}
+
+            {failure ? <LabelError failure={failure} /> : null}
+          </div>
         </aside>
       </main>
     </div>
