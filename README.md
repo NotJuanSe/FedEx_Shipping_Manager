@@ -1,5 +1,16 @@
 # FedEx Shipping Manager
 
+[![Estrellas](https://img.shields.io/github/stars/NotJuanSe/FedEx_Shipping_Manager?style=flat&logo=github&label=estrellas&color=0b5cd5)](https://github.com/NotJuanSe/FedEx_Shipping_Manager/stargazers)
+[![Forks](https://img.shields.io/github/forks/NotJuanSe/FedEx_Shipping_Manager?style=flat&logo=github&label=forks&color=0b5cd5)](https://github.com/NotJuanSe/FedEx_Shipping_Manager/network/members)
+[![Último commit](https://img.shields.io/github/last-commit/NotJuanSe/FedEx_Shipping_Manager?style=flat&label=último%20commit)](https://github.com/NotJuanSe/FedEx_Shipping_Manager/commits/main)
+[![Licencia](https://img.shields.io/github/license/NotJuanSe/FedEx_Shipping_Manager?style=flat&label=licencia)](LICENSE)
+
+[![Next.js](https://img.shields.io/badge/Next.js-16.3.4-000000?style=flat&logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React-19.2.8-087ea4?style=flat&logo=react&logoColor=white)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-38bdf8?style=flat&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![FedEx Ship API](https://img.shields.io/badge/FedEx-Ship_API_v1-4d148c?style=flat&logo=fedex&logoColor=white)](https://developer.fedex.com)
+
 Mini app para crear etiquetas de envío reales usando la **FedEx Ship API** (v1).
 Formulario con validación, vista previa en vivo de la etiqueta 4×6 y generación
 de la etiqueta térmica junto con la factura comercial para envíos internacionales.
@@ -137,6 +148,10 @@ doc/
 `sonar-project.properties` excluye `src/components/ui/**` del análisis: es
 código generado por `npx shadcn add`, y cualquier corrección ahí se pierde en la
 siguiente actualización del componente.
+
+## Licencia
+
+MIT — ver [LICENSE](LICENSE).
 
 ## Referencias
 

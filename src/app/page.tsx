@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { LabelPreview } from "@/components/label-preview";
+import { GithubStarLink } from "@/components/github-link";
 import {
   CredentialsDialog,
   EMPTY_CREDENTIALS,
@@ -446,26 +447,27 @@ export default function Home() {
             </p>
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-2">
-          <CredentialsDialog
-            credentials={credentials}
-            onChange={setCredentials}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="lg"
-            className="h-11"
-            onClick={() => {
-              setDraft(buildDemoDraft());
-              setContents(DEMO_CONTENTS);
-              setErrors({});
-              setLabel(null);
-              setFailure(null);
-            }}
-          >
-            <WandSparklesIcon className="size-4" aria-hidden="true" />
-            Cargar envío de ejemplo
-          </Button>
+            <GithubStarLink />
+            <CredentialsDialog
+              credentials={credentials}
+              onChange={setCredentials}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="h-11"
+              onClick={() => {
+                setDraft(buildDemoDraft());
+                setContents(DEMO_CONTENTS);
+                setErrors({});
+                setLabel(null);
+                setFailure(null);
+              }}
+            >
+              <WandSparklesIcon className="size-4" aria-hidden="true" />
+              Cargar envío de ejemplo
+            </Button>
           </div>
         </div>
       </header>
