@@ -20,6 +20,11 @@ de la etiqueta térmica junto con la factura comercial para envíos internaciona
   rollo térmico de 4×6, con descarga aparte para la etiqueta y la factura.
 - **Envío de ejemplo**: un botón carga un envío de Medellín a Times Square en
   FedEx Pak, para probar el flujo sin llenar el formulario a mano.
+- **Credenciales propias**: un botón del encabezado abre un diálogo donde
+  escribes tu Client ID, Client Secret y número de cuenta y eliges entre sandbox
+  y producción, sin tocar el `.env`. Mientras estén puestas, el botón queda en
+  verde como «API propia configurada»; si las quitas, se vuelven a usar las del
+  servidor.
 
 ## Stack
 
@@ -35,6 +40,21 @@ de la etiqueta térmica junto con la factura comercial para envíos internaciona
 
 > ESLint se mantiene en la línea 9. `eslint-config-next@16.3.4` trae un
 > `eslint-plugin-react` incompatible con ESLint 10 y el lint deja de correr.
+
+## Privacidad
+
+La app **no guarda nada**: ni credenciales, ni etiquetas, ni los envíos
+generados. Lo que escribes en el diálogo de credenciales vive solo en el estado de
+React, viaja en el cuerpo de la petición de camino a FedEx y desaparece al
+recargar la página. No hay base de datos, ni `localStorage`, ni cookies, y el
+registro de errores del servidor guarda el mensaje del error, nunca el cuerpo de
+la petición.
+
+El token OAuth2 sí se guarda en memoria del proceso mientras dura su hora de
+vida, indexado por Client ID y entorno, para no pedir uno nuevo en cada envío.
+
+Si prefieres no escribir tus claves en un despliegue ajeno, clona el repositorio
+y móntalo en tu propio servidor con tu `.env.local`.
 
 ## Requisitos
 
@@ -84,6 +104,7 @@ src/
     shipment-form.tsx     Secciones de dirección y paquete
     label-preview.tsx     Réplica visual de la etiqueta 4×6
     label-result.tsx      Etiqueta creada, iframe del PDF y descargas
+    credentials-panel.tsx Diálogo de credenciales propias y selector de entorno
     ui/                   Componentes generados por shadcn
   lib/
     fedex.ts              OAuth2 con caché de token y transporte HTTP
@@ -98,7 +119,11 @@ doc/
 
 - **Token OAuth2 en caché**: FedEx emite tokens de una hora. Se guardan en
   memoria del proceso con un margen de 60 s, y ante un 401 se limpia la caché y
-  se reintenta una vez.
+  se reintenta una vez. La caché se indexa por Client ID y URL base, así que
+  quien prueba sus credenciales nunca recibe el token de otra cuenta.
+- **URL base como interruptor**: solo hay dos valores posibles, así que la
+  interfaz elige entre sandbox y producción y el servidor resuelve la URL. El
+  cliente nunca manda una URL arbitraria.
 - **Normalización ASCII**: la Ship API rechaza caracteres fuera de ASCII y los
   imprime mal. `toAscii()` descompone el texto (NFD), descarta los diacríticos y
   traduce los símbolos que la descomposición no resuelve (`ß`, `æ`, `€`…).

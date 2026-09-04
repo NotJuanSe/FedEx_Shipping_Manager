@@ -63,17 +63,30 @@ export function readConfig(): FedexConfig {
 }
 
 /**
- * Caché del token en memoria del proceso.
- * FedEx los emite por una hora; pedir uno nuevo en cada request gasta cuota sin necesidad.
+ * Caché de tokens en memoria del proceso.
+ * FedEx los emite por una hora; pedir uno nuevo en cada request gasta cuota sin
+ * necesidad. Se indexa por credencial y entorno: quien prueba sus propias claves
+ * no debe recibir el token de otro, ni el del `.env` del servidor.
  */
-let cachedToken: { value: string; expiresAt: number } | null = null;
+const tokenCache = new Map<string, { value: string; expiresAt: number }>();
 
 /** Margen para no usar un token que caduca mientras viaja la petición. */
 const TOKEN_EXPIRY_MARGIN_MS = 60_000;
 
+/**
+ * Clave de caché. Lleva el clientId y la URL base, nunca el secreto: el mapa
+ * vive en memoria y no hay razón para tener el secreto en dos sitios.
+ */
+function cacheKey(config: FedexConfig): string {
+  return `${config.baseUrl}|${config.clientId}`;
+}
+
 export async function getAccessToken(config: FedexConfig): Promise<string> {
-  if (cachedToken && Date.now() < cachedToken.expiresAt) {
-    return cachedToken.value;
+  const key = cacheKey(config);
+  const cached = tokenCache.get(key);
+
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.value;
   }
 
   const response = await fetch(`${config.baseUrl}/oauth/token`, {
@@ -94,7 +107,7 @@ export async function getAccessToken(config: FedexConfig): Promise<string> {
     const issues = await parseErrors(response);
     throw new FedexError(
       issues[0]?.message ??
-        "FedEx rechazó las credenciales. Revisa FEDEX_CLIENT_ID y FEDEX_CLIENT_SECRET.",
+        "FedEx rechazó las credenciales. Revisa el Client ID y el Client Secret.",
       response.status,
       issues,
     );
@@ -102,17 +115,18 @@ export async function getAccessToken(config: FedexConfig): Promise<string> {
 
   const token = (await response.json()) as TokenResponse;
 
-  cachedToken = {
+  tokenCache.set(key, {
     value: token.access_token,
     expiresAt: Date.now() + token.expires_in * 1000 - TOKEN_EXPIRY_MARGIN_MS,
-  };
+  });
 
   return token.access_token;
 }
 
-/** Vacía la caché del token. Se usa al recibir un 401 para reintentar una vez. */
-export function clearTokenCache(): void {
-  cachedToken = null;
+/** Descarta el token de una credencial. Se usa al recibir un 401 para reintentar una vez. */
+export function clearTokenCache(config?: FedexConfig): void {
+  if (config) tokenCache.delete(cacheKey(config));
+  else tokenCache.clear();
 }
 
 type FedexErrorBody = {
@@ -156,7 +170,7 @@ export async function createShipment(
   let response = await request(await getAccessToken(config));
 
   if (response.status === 401) {
-    clearTokenCache();
+    clearTokenCache(config);
     response = await request(await getAccessToken(config));
   }
 

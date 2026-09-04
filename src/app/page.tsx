@@ -12,6 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { LabelPreview } from "@/components/label-preview";
 import {
+  CredentialsDialog,
+  EMPTY_CREDENTIALS,
+  type FedexCredentials,
+} from "@/components/credentials-panel";
+import {
   AddressSection,
   PackageSection,
   type FieldErrors,
@@ -97,12 +102,13 @@ type LabelRequestResult =
 async function requestLabel(
   draft: ShipmentDraft,
   contents: { description: string; declaredValue: string } | undefined,
+  credentials: FedexCredentials,
 ): Promise<LabelRequestResult> {
   try {
     const response = await fetch("/api/labels", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ draft, contents }),
+      body: JSON.stringify({ draft, contents, credentials }),
     });
 
     const data = await response.json();
@@ -354,6 +360,10 @@ export default function Home() {
     description: "",
     declaredValue: "",
   });
+  // Solo en memoria: recargar la página las borra, que es justo lo que promete
+  // el aviso del panel.
+  const [credentials, setCredentials] =
+    useState<FedexCredentials>(EMPTY_CREDENTIALS);
   const [status, setStatus] = useState<"idle" | "sending">("idle");
   const [label, setLabel] = useState<CreatedLabel | null>(null);
   const [failure, setFailure] = useState<LabelFailure | null>(null);
@@ -411,6 +421,7 @@ export default function Home() {
     const result = await requestLabel(
       draft,
       international ? contents : undefined,
+      credentials,
     );
 
     if (result.ok) setLabel(result.label);
@@ -434,11 +445,16 @@ export default function Home() {
               Crea una etiqueta de envío y confírmala antes de generarla.
             </p>
           </div>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+          <CredentialsDialog
+            credentials={credentials}
+            onChange={setCredentials}
+          />
           <Button
             type="button"
             variant="outline"
             size="lg"
-            className="ml-auto h-11"
+            className="h-11"
             onClick={() => {
               setDraft(buildDemoDraft());
               setContents(DEMO_CONTENTS);
@@ -450,6 +466,7 @@ export default function Home() {
             <WandSparklesIcon className="size-4" aria-hidden="true" />
             Cargar envío de ejemplo
           </Button>
+          </div>
         </div>
       </header>
 
@@ -532,6 +549,7 @@ export default function Home() {
           {international ? (
             <CustomsSection contents={contents} onChange={setContents} />
           ) : null}
+
         </form>
 
         <ResultPanel

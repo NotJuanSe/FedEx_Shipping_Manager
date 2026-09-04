@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { FedexError, createShipment, readConfig } from "@/lib/fedex";
+import {
+  FedexError,
+  createShipment,
+  readConfig,
+  type FedexConfig,
+} from "@/lib/fedex";
 import {
   buildShipmentPayload,
   extractLabel,
@@ -16,10 +21,28 @@ import {
 /** El token vive en memoria del proceso, así que el handler corre en Node, no en edge. */
 export const runtime = "nodejs";
 
+/**
+ * Credenciales que el visitante escribe en la interfaz para probar su propia
+ * cuenta. Solo viven en el cuerpo de esta petición: no se guardan, no se
+ * registran y no salen del proceso salvo hacia FedEx.
+ */
+type RequestCredentials = {
+  clientId?: string;
+  clientSecret?: string;
+  accountNumber?: string;
+  environment?: "sandbox" | "production";
+};
+
 type RequestBody = {
   draft?: ShipmentDraft;
   contents?: CustomsContents;
+  credentials?: RequestCredentials;
 };
+
+const BASE_URLS = {
+  sandbox: "https://apis-sandbox.fedex.com",
+  production: "https://apis.fedex.com",
+} as const;
 
 const REQUIRED_ADDRESS_FIELDS: (keyof Address)[] = [
   "personName",
@@ -123,6 +146,36 @@ function validate(body: RequestBody): string[] {
   return problems;
 }
 
+/**
+ * Usa las credenciales de la petición si vienen completas; si no, las del
+ * servidor. Así el despliegue público funciona con su propia cuenta sandbox y
+ * cualquiera puede probar la suya sin tocar el `.env`.
+ */
+function resolveConfig(credentials: RequestCredentials | undefined): FedexConfig {
+  const clientId = credentials?.clientId?.trim();
+  const clientSecret = credentials?.clientSecret?.trim();
+  const accountNumber = credentials?.accountNumber?.trim();
+
+  if (!clientId && !clientSecret && !accountNumber) return readConfig();
+
+  if (!clientId || !clientSecret || !accountNumber) {
+    throw new FedexError(
+      "Para usar tus propias credenciales hacen falta el Client ID, el Client Secret y el número de cuenta.",
+      422,
+    );
+  }
+
+  return {
+    clientId,
+    clientSecret,
+    accountNumber,
+    baseUrl:
+      credentials?.environment === "production"
+        ? BASE_URLS.production
+        : BASE_URLS.sandbox,
+  };
+}
+
 export async function POST(request: Request) {
   let body: RequestBody;
 
@@ -144,7 +197,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const config = readConfig();
+    const config = resolveConfig(body.credentials);
     const payload = buildShipmentPayload(body.draft as ShipmentDraft, {
       accountNumber: config.accountNumber,
       contents: body.contents,
@@ -171,7 +224,12 @@ export async function POST(request: Request) {
       );
     }
 
-    console.error("Fallo inesperado al crear la etiqueta:", error);
+    // Solo el error: el cuerpo de la petición puede traer el Client Secret
+    // del visitante y no tiene por qué quedar en los registros del servidor.
+    console.error(
+      "Fallo inesperado al crear la etiqueta:",
+      error instanceof Error ? error.message : "error desconocido",
+    );
     return NextResponse.json(
       { error: "No se pudo crear la etiqueta." },
       { status: 500 },
