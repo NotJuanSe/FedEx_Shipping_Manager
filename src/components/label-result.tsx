@@ -41,7 +41,9 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
+    // atob devuelve una cadena binaria: cada carácter cabe en un byte,
+    // así que codePointAt y charCodeAt coinciden aquí.
+    bytes[i] = binary.codePointAt(i) ?? 0;
   }
   return new Blob([bytes], { type: mimeType });
 }

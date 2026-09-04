@@ -31,64 +31,93 @@ const REQUIRED_ADDRESS_FIELDS: (keyof Address)[] = [
 ];
 
 /**
+ * Un texto vacío y uno que no es número deben fallar igual.
+ * `Number("abc")` da NaN, y NaN <= 0 es falso, así que la comparación directa
+ * dejaría pasar la basura: hay que descartar lo no finito antes de comparar.
+ */
+function isPositiveNumber(value: string | undefined): boolean {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0;
+}
+
+function validateAddress(
+  section: "shipper" | "recipient",
+  address: Address | undefined,
+): string[] {
+  if (!address) return [`Falta la dirección de ${section}.`];
+
+  const problems = REQUIRED_ADDRESS_FIELDS.filter(
+    (field) => !address[field]?.trim(),
+  ).map((field) => `${section}.${field} es obligatorio.`);
+
+  if (
+    requiresState(address.countryCode) &&
+    !address.stateOrProvinceCode?.trim()
+  ) {
+    problems.push(
+      `${section}.stateOrProvinceCode es obligatorio para ${address.countryCode}.`,
+    );
+  }
+
+  return problems;
+}
+
+function validatePackage(draft: ShipmentDraft): string[] {
+  const problems: string[] = [];
+  const pkg = draft.packageDetail;
+
+  if (!draft.serviceType) problems.push("Falta el tipo de servicio.");
+  if (!pkg?.packagingType) problems.push("Falta el embalaje.");
+
+  if (!isPositiveNumber(pkg?.weight)) {
+    problems.push("El peso debe ser mayor que cero.");
+  }
+
+  for (const dimension of ["length", "width", "height"] as const) {
+    if (!isPositiveNumber(pkg?.[dimension])) {
+      problems.push(`La dimensión ${dimension} debe ser mayor que cero.`);
+    }
+  }
+
+  return problems;
+}
+
+/** Sin declaración aduanera FedEx rechaza cualquier envío entre países distintos. */
+function validateCustoms(contents: CustomsContents | undefined): string[] {
+  const problems: string[] = [];
+
+  if (!contents?.description?.trim()) {
+    problems.push(
+      "Un envío internacional necesita la descripción del contenido.",
+    );
+  }
+
+  if (!isPositiveNumber(contents?.declaredValue)) {
+    problems.push(
+      "Un envío internacional necesita un valor declarado mayor que cero.",
+    );
+  }
+
+  return problems;
+}
+
+/**
  * Revalida en el servidor lo mismo que el formulario ya exige.
  * El cliente puede mandar cualquier cosa, y una llamada rechazada por FedEx
  * consume cuota igual.
  */
 function validate(body: RequestBody): string[] {
-  const problems: string[] = [];
   const draft = body.draft;
-
   if (!draft) return ["Falta el cuerpo del envío."];
 
-  for (const section of ["shipper", "recipient"] as const) {
-    const address = draft[section];
-    if (!address) {
-      problems.push(`Falta la dirección de ${section}.`);
-      continue;
-    }
+  const problems = [
+    ...validateAddress("shipper", draft.shipper),
+    ...validateAddress("recipient", draft.recipient),
+    ...validatePackage(draft),
+  ];
 
-    for (const field of REQUIRED_ADDRESS_FIELDS) {
-      if (!address[field]?.trim()) {
-        problems.push(`${section}.${field} es obligatorio.`);
-      }
-    }
-
-    if (
-      requiresState(address.countryCode) &&
-      !address.stateOrProvinceCode?.trim()
-    ) {
-      problems.push(
-        `${section}.stateOrProvinceCode es obligatorio para ${address.countryCode}.`,
-      );
-    }
-  }
-
-  if (!draft.serviceType) problems.push("Falta el tipo de servicio.");
-  if (!draft.packageDetail?.packagingType) problems.push("Falta el embalaje.");
-
-  if (!(Number(draft.packageDetail?.weight) > 0)) {
-    problems.push("El peso debe ser mayor que cero.");
-  }
-
-  for (const dimension of ["length", "width", "height"] as const) {
-    if (!(Number(draft.packageDetail?.[dimension]) > 0)) {
-      problems.push(`La dimensión ${dimension} debe ser mayor que cero.`);
-    }
-  }
-
-  // Sin declaración aduanera FedEx rechaza cualquier envío entre países distintos.
   if (draft.shipper && draft.recipient && isInternational(draft)) {
-    if (!body.contents?.description?.trim()) {
-      problems.push(
-        "Un envío internacional necesita la descripción del contenido.",
-      );
-    }
-    if (!(Number(body.contents?.declaredValue) > 0)) {
-      problems.push(
-        "Un envío internacional necesita un valor declarado mayor que cero.",
-      );
-    }
+    problems.push(...validateCustoms(body.contents));
   }
 
   return problems;
